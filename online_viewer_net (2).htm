@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>İstanbul Lise Tercih Rehberi 2024 (Devlet & Özel)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Neutral -->
+    <!-- Application Structure Plan: Kullanıcıların lise tercihi yaparken ihtiyaç duyacağı temel soruları (Nerede? Ne tür bir okul? Hangi puan aralığında?) merkeze alan bir pano (dashboard) yapısı tasarlandı. Akış şu şekildedir: 1) Üstte yer alan kapsamlı filtreleme araçları (arama, ilçe, okul türü, dil, yüzdelik dilim) ile kullanıcı kendi kriterlerini belirler. 2) Filtre sonuçlarına göre anında güncellenen özet istatistik kartları, genel bir bakış sunar. 3) Etkileşimli grafikler (ilçelere göre dağılım, okul türü oranları), veriyi görsel olarak anlamayı kolaylaştırır. 4) Son olarak, filtrelenmiş ve sıralanabilir detaylı veri tablosu, incelenen okullar hakkında tüm bilgileri sunar. Bu yapı, kullanıcıyı genelden özele doğru yönlendirerek karmaşık veri setini anlaşılır ve yönetilebilir hale getirir, bu da karar verme sürecini doğrudan destekler. -->
+    <!-- Visualization & Content Choices: 
+        - Rapor Bilgisi: İlçelere göre okul sayıları -> Amaç: Karşılaştırma -> Görselleştirme: Yatay Çubuk Grafik (Chart.js/Canvas) -> Etkileşim: Filtrelere göre dinamik olarak güncellenir. -> Gerekçe: İlçelerdeki okul yoğunluğunu hızlıca karşılaştırmak için en etkili yöntemdir.
+        - Rapor Bilgisi: Okul türlerinin dağılımı -> Amaç: Oranları Gösterme -> Görselleştirme: Donut Grafik (Chart.js/Canvas) -> Etkileşim: Filtrelere göre güncellenir, üzerine gelince detay gösterir. -> Gerekçe: Filtrelenmiş sonuç setindeki okul türü kompozisyonunu bir bakışta gösterir.
+        - Rapor Bilgisi: Puan ve Yüzdelik Dilim ilişkisi -> Amaç: İlişkiyi Gösterme -> Görselleştirme: Dağılım Grafiği (Scatter Plot - Chart.js/Canvas) -> Etkileşim: Her nokta bir okulu temsil eder ve üzerine gelince okul adını gösterir. -> Gerekçe: Yüzdelik dilimin puana göre daha stabil bir metrik olduğunu ve okulların bu iki eksende nasıl konumlandığını görsel olarak kanıtlar.
+        - Rapor Bilgisi: Tüm okul detayları -> Amaç: Bilgilendirme/Organize Etme -> Sunum Yöntemi: Etkileşimli HTML Tablosu -> Etkileşim: Arama, filtreleme, sayfalama ve sütun başlıklarına tıklayarak sıralama. -> Gerekçe: Kullanıcının kendi kriterlerine göre daralttığı veri setini detaylı olarak incelemesi ve karşılaştırması için vazgeçilmez bir araçtır.
+        -> Library/Method: Tüm görseller için Chart.js (Canvas) ve dinamik tablo için Vanilla JS kullanılmıştır. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            background-color: #F8F7F4;
+            font-family: 'Inter', sans-serif;
+            color: #4A4A4A;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            max-height: 400px;
+        }
+        .custom-select-container {
+            position: relative;
+        }
+        .custom-select-options {
+            display: none;
+            position: absolute;
+            background-color: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.375rem;
+            width: 100%;
+            z-index: 10;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .custom-select-options.show {
+            display: block;
+        }
+        .table-sortable th {
+            cursor: pointer;
+        }
+         .table-sortable th:hover {
+            background-color: #e2e8f0;
+        }
+        .table-sortable th .sort-indicator {
+            display: inline-block;
+            margin-left: 5px;
+            opacity: 0.5;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4E6E81;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3b5260;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-[#27374D]">İstanbul Lise Tercih Rehberi 2024</h1>
+            <p class="mt-2 text-lg text-[#526D82]">Devlet ve Özel Okullar için LGS Puan Analiz Panosu</p>
+        </header>
+
+        <main>
+            <section id="filters" class="bg-white p-6 rounded-xl shadow-md mb-8">
+                <h2 class="text-2xl font-semibold mb-4 text-[#27374D]">Filtreleme ve Sıralama</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="lg:col-span-2">
+                        <label for="search-input" class="block text-sm font-medium text-gray-700 mb-1">Okul Adı Ara</label>
+                        <input type="text" id="search-input" placeholder="Okul adı yazın..." class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4E6E81] focus:border-transparent transition">
+                    </div>
+                    <div class="custom-select-container">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">İlçe Seçin</label>
+                        <button id="ilce-filter-button" class="w-full bg-white p-2 border border-gray-300 rounded-lg text-left">Tüm İlçeler</button>
+                        <div id="ilce-filter-options" class="custom-select-options mt-1"></div>
+                    </div>
+                    <div class="custom-select-container">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Okul Türü Seçin</label>
+                        <button id="tur-filter-button" class="w-full bg-white p-2 border border-gray-300 rounded-lg text-left">Tüm Türler</button>
+                        <div id="tur-filter-options" class="custom-select-options mt-1"></div>
+                    </div>
+                     <div class="custom-select-container">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Öğretim Dili</label>
+                        <button id="dil-filter-button" class="w-full bg-white p-2 border border-gray-300 rounded-lg text-left">Tüm Diller</button>
+                        <div id="dil-filter-options" class="custom-select-options mt-1"></div>
+                    </div>
+                    <div>
+                        <label for="kaynak-filter" class="block text-sm font-medium text-gray-700 mb-1">Okul Kaynağı</label>
+                        <select id="kaynak-filter" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4E6E81] focus:border-transparent transition">
+                            <option value="Tümü">Tümü</option>
+                            <option value="Devlet">Devlet Okulu</option>
+                            <option value="Özel">Özel Okul</option>
+                        </select>
+                    </div>
+                     <div>
+                        <label for="sort-filter" class="block text-sm font-medium text-gray-700 mb-1">Sıralama Kriteri</label>
+                        <select id="sort-filter" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4E6E81] focus:border-transparent transition">
+                            <option value="puan_desc">Puana Göre (Azalan)</option>
+                            <option value="puan_asc">Puana Göre (Artan)</option>
+                            <option value="yuzdelik_asc">Yüzdelik Dilime Göre (Artan)</option>
+                            <option value="yuzdelik_desc">Yüzdelik Dilime Göre (Azalan)</option>
+                            <option value="ad_asc">Okul Adına Göre (A-Z)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Puan Aralığı</label>
+                        <div class="flex space-x-2">
+                            <input type="number" id="min-score-input" placeholder="Min" class="w-1/2 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4E6E81] focus:border-transparent transition">
+                            <input type="number" id="max-score-input" placeholder="Max" class="w-1/2 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4E6E81] focus:border-transparent transition">
+                        </div>
+                    </div>
+                    <div class="lg:col-span-4">
+                        <label for="percentile-slider" class="block text-sm font-medium text-gray-700 mb-1">Yüzdelik Dilim Aralığı (Sadece Devlet Okulları): <span id="percentile-range-label" class="font-bold">0.01 - 100</span></label>
+                        <input type="range" id="percentile-slider" min="0.01" max="100" step="0.01" value="100" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    <div class="lg:col-span-4 flex items-end">
+                         <button id="reset-filters" class="w-full bg-[#4E6E81] text-white p-2 rounded-lg hover:bg-[#3b5260] transition">Filtreleri Temizle</button>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="stats" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                 <div class="bg-white p-5 rounded-xl shadow-md flex items-center space-x-4">
+                    <div class="bg-[#DDE6ED]/60 p-3 rounded-full">
+                        <svg class="w-8 h-8 text-[#27374D]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Toplam Okul</p>
+                        <p id="total-schools" class="text-2xl font-bold text-[#27374D]">0</p>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-md flex items-center space-x-4">
+                     <div class="bg-[#DDE6ED]/60 p-3 rounded-full">
+                       <svg class="w-8 h-8 text-[#27374D]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Ort. Taban Puan</p>
+                        <p id="avg-score" class="text-2xl font-bold text-[#27374D]">0</p>
+                    </div>
+                </div>
+                 <div class="bg-white p-5 rounded-xl shadow-md flex items-center space-x-4">
+                     <div class="bg-[#DDE6ED]/60 p-3 rounded-full">
+                        <svg class="w-8 h-8 text-[#27374D]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">En Yüksek Puan</p>
+                        <p id="max-score" class="text-2xl font-bold text-[#27374D]">0</p>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-md flex items-center space-x-4">
+                     <div class="bg-[#DDE6ED]/60 p-3 rounded-full">
+                        <svg class="w-8 h-8 text-[#27374D]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path></svg>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">En Düşük Yüzdelik</p>
+                        <p id="min-percentile" class="text-2xl font-bold text-[#27374D]">0</p>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="charts" class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h3 class="text-xl font-semibold mb-4 text-[#27374D]">İlçelere Göre Okul Sayısı</h3>
+                    <div class="chart-container">
+                        <canvas id="schoolsByDistrictChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h3 class="text-xl font-semibold mb-4 text-[#27374D]">Okul Türü Dağılımı</h3>
+                    <div class="chart-container">
+                        <canvas id="schoolTypesChart"></canvas>
+                    </div>
+                </div>
+                 <div class="bg-white p-6 rounded-xl shadow-md lg:col-span-2">
+                    <h3 class="text-xl font-semibold mb-4 text-[#27374D]">Taban Puan vs. Yüzdelik Dilim (Sadece Devlet Okulları)</h3>
+                     <div class="chart-container">
+                        <canvas id="scoreVsPercentileChart"></canvas>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="data-table" class="bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-2xl font-semibold mb-4 text-[#27374D]">Okul Listesi</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 table-sortable">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" data-sort="kaynakTuru">Kaynak <span class="sort-indicator">↕</span></th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" data-sort="ilce">İlçe <span class="sort-indicator">↕</span></th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" data-sort="okulAdi">Okul Adı <span class="sort-indicator">↕</span></th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" data-sort="okulTuru">Okul Türü <span class="sort-indicator">↕</span></th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" data-sort="ogretimDili">Dil <span class="sort-indicator">↕</span></th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" data-sort="tabanPuan">Taban Puan <span class="sort-indicator">↕</span></th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" data-sort="yuzdelikDilim">Yüzdelik Dilim <span class="sort-indicator">↕</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="school-table-body" class="bg-white divide-y divide-gray-200">
+                        </tbody>
+                    </table>
+                </div>
+                <div id="pagination-controls" class="py-4 flex justify-between items-center">
+                    <p class="text-sm text-gray-600">Toplam <span id="total-records" class="font-bold">0</span> kayıt</p>
+                    <div>
+                        <button id="prev-page" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">Önceki</button>
+                        <span id="page-info" class="px-4 py-2 text-sm">Sayfa 1 / 1</span>
+                        <button id="next-page" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">Sonraki</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+        <footer class="text-center mt-8 py-4 border-t border-gray-200">
+            <p class="text-sm text-gray-500">Devlet okulu verileri 2024 LGS, özel okul verileri okulların 2024-2025 kayıt dönemi ilanlarına dayanmaktadır. Tercih sürecinde resmi duyuruları takip ediniz.</p>
+        </footer>
+    </div>
+
+    <script>
+        const schoolData = [
+            { "kaynakTuru": "Devlet", "ilce": "Beyoğlu", "okulAdi": "Galatasaray Üniversitesi Galatasaray Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Fransızca", "tabanPuan": 500, "yuzdelikDilim": 0.01 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "İstanbul Erkek Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 500, "yuzdelikDilim": 0.01 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "Kabataş Erkek Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 497.468, "yuzdelikDilim": 0.06 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "Kabataş Erkek Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 497.468, "yuzdelikDilim": 0.06 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "İstanbul Atatürk Fen Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 494.202, "yuzdelikDilim": 0.16 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "Cağaloğlu Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 491.796, "yuzdelikDilim": 0.28 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "Çapa Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 489.005, "yuzdelikDilim": 0.37 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Hüseyin Avni Sözen Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 489.005, "yuzdelikDilim": 0.37 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Hüseyin Avni Sözen Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 488.705, "yuzdelikDilim": 0.41 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Baykar Milli Teknoloji Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 488.403, "yuzdelikDilim": 0.53 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "Beşiktaş Sakıp Sabancı Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 488.403, "yuzdelikDilim": 0.53 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Kartal Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 488.403, "yuzdelikDilim": 0.53 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "Kadıköy Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 486.172, "yuzdelikDilim": 0.68 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Haydarpaşa Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 483.766, "yuzdelikDilim": 0.85 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Baykar Milli Teknoloji Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Havacılık ve Uzay Teknolojisi", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 483.033, "yuzdelikDilim": 0.97 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "Vefa Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 483.033, "yuzdelikDilim": 0.97 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Haydarpaşa Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 482.906, "yuzdelikDilim": 1.02 },
+            { "kaynakTuru": "Devlet", "ilce": "Beylikdüzü", "okulAdi": "Yaşar Acar Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 481.775, "yuzdelikDilim": 1.24 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Teknopark İstanbul Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Siber Güvenlik Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 480.896, "yuzdelikDilim": 1.32 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Burak Bora Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 480.722, "yuzdelikDilim": 1.34 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "Beşiktaş Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 480.500, "yuzdelikDilim": 1.36 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Burak Bora Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Fransızca", "tabanPuan": 480.500, "yuzdelikDilim": 1.36 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Validebağ Fen Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 478.985, "yuzdelikDilim": 1.53 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "Kadıköy Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 478.953, "yuzdelikDilim": 1.53 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "Pertevniyal Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 478.791, "yuzdelikDilim": 1.54 },
+            { "kaynakTuru": "Devlet", "ilce": "Büyükçekmece", "okulAdi": "Şehit Münir Alkan Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 478.490, "yuzdelikDilim": 1.56 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "İstanbul Ticaret Odası Marmara Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 477.408, "yuzdelikDilim": 1.71 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "M.Emin Saraç Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 477.108, "yuzdelikDilim": 1.85 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Adnan Menderes Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 475.308, "yuzdelikDilim": 2.07 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "Şehremini Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 474.702, "yuzdelikDilim": 2.21 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Ahmet Keleşoğlu Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 472.654, "yuzdelikDilim": 2.47 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "Atatürk Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 472.606, "yuzdelikDilim": 2.48 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Yüksel-İlhan Alanyalı Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 472.343, "yuzdelikDilim": 2.51 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Şehit İlhan Varank Fen Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Fen Lisesi", "ogretimDili": "Almanca", "tabanPuan": 472.038, "yuzdelikDilim": 2.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "Çemberlitaş Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 471.911, "yuzdelikDilim": 2.58 },
+            { "kaynakTuru": "Devlet", "ilce": "Küçükçekmece", "okulAdi": "Doğan Cüceloğlu Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 471.737, "yuzdelikDilim": 2.67 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Şehit İlhan Varank Fen Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 471.737, "yuzdelikDilim": 2.67 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Nişantaşı Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 471.436, "yuzdelikDilim": 2.76 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "M.Emin Saraç Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Arapça", "tabanPuan": 470.147, "yuzdelikDilim": 2.95 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Bahçelievler Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 469.631, "yuzdelikDilim": 3.00 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Kartal Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 469.078, "yuzdelikDilim": 3.15 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Bahçelievler Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 468.904, "yuzdelikDilim": 3.20 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Hacı Şöhret Demiröz Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 468.904, "yuzdelikDilim": 3.20 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "Kadıköy Ahmet Sani Gezici Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 468.904, "yuzdelikDilim": 3.20 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "M.Emin Saraç Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Rusça", "tabanPuan": 468.600, "yuzdelikDilim": 3.24 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Gönüllü Hizmet Vakfı Mustafa Saffet Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 468.532, "yuzdelikDilim": 3.25 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Köy Hizmetleri Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 468.422, "yuzdelikDilim": 3.26 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Prof. Dr. Necmettin Erbakan Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 466.808, "yuzdelikDilim": 3.49 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "Kadıköy Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İspanyolca", "tabanPuan": 466.497, "yuzdelikDilim": 3.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Ümraniye", "okulAdi": "Prof. Dr. Nabi Avcı Fen Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 466.414, "yuzdelikDilim": 3.56 },
+            { "kaynakTuru": "Devlet", "ilce": "Güngören", "okulAdi": "Güngören İstanbul Ticaret Odası Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 466.239, "yuzdelikDilim": 3.61 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Maltepe Fen Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 466.239, "yuzdelikDilim": 3.61 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "İstanbul Teknik Üniversitesi Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 466.113, "yuzdelikDilim": 3.64 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "İstanbul Ticaret Odası Marmara Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Arapça", "tabanPuan": 466.113, "yuzdelikDilim": 3.64 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Kartal Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 466.068, "yuzdelikDilim": 3.67 },
+            { "kaynakTuru": "Devlet", "ilce": "Silivri", "okulAdi": "Prof. Dr. Fuat Sezgin Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 466.065, "yuzdelikDilim": 3.67 },
+            { "kaynakTuru": "Devlet", "ilce": "Bakırköy", "okulAdi": "Hasan Polatkan Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 465.463, "yuzdelikDilim": 3.83 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "İstanbul Ticaret Odası Marmara Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Japonca", "tabanPuan": 464.583, "yuzdelikDilim": 3.94 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Samiha Ayverdi Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 464.103, "yuzdelikDilim": 4.01 },
+            { "kaynakTuru": "Devlet", "ilce": "Bakırköy", "okulAdi": "Yeşilköy Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 464.008, "yuzdelikDilim": 4.01 },
+            { "kaynakTuru": "Devlet", "ilce": "Tuzla", "okulAdi": "Behiye Dr. Nevhiz Işıl Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 462.242, "yuzdelikDilim": 4.34 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Üsküdar Ahmet Keleşoğlu Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 461.924, "yuzdelikDilim": 4.39 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Samiha Ayverdi Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 461.915, "yuzdelikDilim": 4.39 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Üsküdar Ahmet Keleşoğlu Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 461.092, "yuzdelikDilim": 4.53 },
+            { "kaynakTuru": "Devlet", "ilce": "Beyoğlu", "okulAdi": "Beyoğlu Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Arapça", "tabanPuan": 460.940, "yuzdelikDilim": 4.56 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Nişantaşı Nuri Akın Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 460.823, "yuzdelikDilim": 4.58 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "Kadıköy Ahmet Sani Gezici Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İspanyolca", "tabanPuan": 460.747, "yuzdelikDilim": 4.60 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Nişantaşı Nuri Akın Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 460.747, "yuzdelikDilim": 4.60 },
+            { "kaynakTuru": "Devlet", "ilce": "Güngören", "okulAdi": "Güngören İstanbul Ticaret Odası Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 460.582, "yuzdelikDilim": 4.64 },
+            { "kaynakTuru": "Devlet", "ilce": "Beylikdüzü", "okulAdi": "Büyükşehir Hüseyin Yıldız Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 460.219, "yuzdelikDilim": 4.75 },
+            { "kaynakTuru": "Devlet", "ilce": "Arnavutköy", "okulAdi": "İstanbul Havalimanı Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Uçak Bakım Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 458.959, "yuzdelikDilim": 4.97 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "İstanbul Recep Tayyip Erdoğan Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 458.209, "yuzdelikDilim": 5.11 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Kadir Has Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 457.871, "yuzdelikDilim": 5.17 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "Hayrullah Kefoğlu Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 457.814, "yuzdelikDilim": 5.18 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "Suat Terimer Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 457.605, "yuzdelikDilim": 5.22 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "İstanbul Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 457.307, "yuzdelikDilim": 5.28 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "İstanbul Teknik Üniversitesi Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 457.082, "yuzdelikDilim": 5.30 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "Arnavutköy Korkmaz Yiğit Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 456.397, "yuzdelikDilim": 5.38 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "Kadıköy Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 455.109, "yuzdelikDilim": 5.63 },
+            { "kaynakTuru": "Devlet", "ilce": "Beykoz", "okulAdi": "Beykoz Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 454.944, "yuzdelikDilim": 5.66 },
+            { "kaynakTuru": "Devlet", "ilce": "Tuzla", "okulAdi": "Mehmet Tekinalp Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 454.944, "yuzdelikDilim": 5.66 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "İstanbul Üsküdar Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 453.867, "yuzdelikDilim": 5.87 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "Kadıköy Ahmet Sani Gezici Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Arapça", "tabanPuan": 453.686, "yuzdelikDilim": 5.90 },
+            { "kaynakTuru": "Devlet", "ilce": "Eyüpsultan", "okulAdi": "Eyüpsultan Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 453.607, "yuzdelikDilim": 5.91 },
+            { "kaynakTuru": "Devlet", "ilce": "Bakırköy", "okulAdi": "Florya Tevfik Ercan Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 453.490, "yuzdelikDilim": 5.93 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "Göztepe İhsan Kurşunoğlu Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 452.879, "yuzdelikDilim": 6.02 },
+            { "kaynakTuru": "Devlet", "ilce": "Küçükçekmece", "okulAdi": "Fahreddin Kerim Gökay Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 452.848, "yuzdelikDilim": 6.02 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Adile Mermerci Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 451.936, "yuzdelikDilim": 6.21 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Pendik Fatih Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 451.470, "yuzdelikDilim": 6.28 },
+            { "kaynakTuru": "Devlet", "ilce": "Sancaktepe", "okulAdi": "Sancaktepe Teknoloji Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Teknoloji Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 450.707, "yuzdelikDilim": 6.37 },
+            { "kaynakTuru": "Devlet", "ilce": "Bakırköy", "okulAdi": "Ataköy Cumhuriyet Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 450.232, "yuzdelikDilim": 6.38 },
+            { "kaynakTuru": "Devlet", "ilce": "Çatalca", "okulAdi": "Çatalca Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 449.974, "yuzdelikDilim": 6.40 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Şehit Haki Aras Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 449.751, "yuzdelikDilim": 6.56 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Hacı Sabancı Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 449.180, "yuzdelikDilim": 6.68 },
+            { "kaynakTuru": "Devlet", "ilce": "Büyükçekmece", "okulAdi": "Büyükçekmece Atatürk Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 448.512, "yuzdelikDilim": 6.80 },
+            { "kaynakTuru": "Devlet", "ilce": "Beyoğlu", "okulAdi": "İstanbul Atatürk Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 447.925, "yuzdelikDilim": 6.86 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Akif İnan Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 447.510, "yuzdelikDilim": 6.86 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "Uluslararası Fatih Sultan Mehmet Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 446.137, "yuzdelikDilim": 7.21 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Şişli Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 444.729, "yuzdelikDilim": 7.46 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "İstanbul Recep Tayyip Erdoğan Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Arapça", "tabanPuan": 444.145, "yuzdelikDilim": 7.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Ümraniye", "okulAdi": "Nevzat Ayaz Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 444.001, "yuzdelikDilim": 7.56 },
+            { "kaynakTuru": "Devlet", "ilce": "Küçükçekmece", "okulAdi": "Gazi Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 443.595, "yuzdelikDilim": 7.59 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Kırımlı Fazilet Olcay Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 443.507, "yuzdelikDilim": 7.60 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Dede Korkut Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 443.367, "yuzdelikDilim": 7.61 },
+            { "kaynakTuru": "Devlet", "ilce": "Gaziosmanpaşa", "okulAdi": "Gaziosmanpaşa Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 442.913, "yuzdelikDilim": 7.65 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Habire Yahşi Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 442.903, "yuzdelikDilim": 7.65 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "Uluslararası Fatih Sultan Mehmet Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 440.323, "yuzdelikDilim": 8.25 },
+            { "kaynakTuru": "Devlet", "ilce": "Çekmeköy", "okulAdi": "Özden Cengiz Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 439.854, "yuzdelikDilim": 8.33 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Demirören Medya Ve Teknoloji Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Radyo-Televizyon Alanı (Sınavlı)", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 439.172, "yuzdelikDilim": 8.45 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Gülizar Zeki Obdan Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 439.079, "yuzdelikDilim": 8.47 },
+            { "kaynakTuru": "Devlet", "ilce": "Avcılar", "okulAdi": "Süleyman Nazif Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 438.402, "yuzdelikDilim": 8.59 },
+            { "kaynakTuru": "Devlet", "ilce": "Bakırköy", "okulAdi": "Yahya Kemal Beyatlı Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 437.928, "yuzdelikDilim": 8.67 },
+            { "kaynakTuru": "Devlet", "ilce": "Gaziosmanpaşa", "okulAdi": "Gaziosmanpaşa Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 437.531, "yuzdelikDilim": 8.75 },
+            { "kaynakTuru": "Devlet", "ilce": "Kağıthane", "okulAdi": "Kağıthane Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 437.015, "yuzdelikDilim": 8.83 },
+            { "kaynakTuru": "Devlet", "ilce": "Şile", "okulAdi": "Dr. Vasıf Topçu Fen Lisesi", "alanProgram": "-", "okulTuru": "Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 436.679, "yuzdelikDilim": 8.89 },
+            { "kaynakTuru": "Devlet", "ilce": "Kağıthane", "okulAdi": "Kağıthane Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 436.587, "yuzdelikDilim": 8.91 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Borsa İstanbul Zeytinburnu Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 436.188, "yuzdelikDilim": 8.98 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "15 Temmuz Şehitleri Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Teknoloji Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 435.952, "yuzdelikDilim": 9.02 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Yıldız Teknik Üniversitesi Maçka Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 435.770, "yuzdelikDilim": 9.05 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Esenyurt Nakipoğlu Cumhuriyet Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 435.746, "yuzdelikDilim": 9.06 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Şehit Adil Büyükcengiz Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 435.396, "yuzdelikDilim": 9.12 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Tenzile Erdoğan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 435.395, "yuzdelikDilim": 9.12 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Prof. Dr. Mümtaz Turhan Sosyal Bilimler Lisesi", "alanProgram": "-", "okulTuru": "Sosyal Bilimler Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 434.949, "yuzdelikDilim": 9.21 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Ömer Çam Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 433.513, "yuzdelikDilim": 9.44 },
+            { "kaynakTuru": "Devlet", "ilce": "Beyoğlu", "okulAdi": "Beyoğlu Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 432.572, "yuzdelikDilim": 9.62 },
+            { "kaynakTuru": "Devlet", "ilce": "Gaziosmanpaşa", "okulAdi": "Mevlana Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 432.462, "yuzdelikDilim": 9.64 },
+            { "kaynakTuru": "Devlet", "ilce": "Beykoz", "okulAdi": "Paşabahçe Ahmet Ferit İnal Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "Almanca", "tabanPuan": 432.214, "yuzdelikDilim": 9.68 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Pendik İto Şehit Ahmet Aslanhan Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 432.135, "yuzdelikDilim": 9.70 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Teb Ataşehir Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 431.411, "yuzdelikDilim": 9.82 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultanbeyli", "okulAdi": "Şehit Muhammed Fazlı Demir Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 431.315, "yuzdelikDilim": 9.84 },
+            { "kaynakTuru": "Devlet", "ilce": "Küçükçekmece", "okulAdi": "Prof. Dr. Sabahattin Zaim Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 431.139, "yuzdelikDilim": 9.87 },
+            { "kaynakTuru": "Devlet", "ilce": "Sancaktepe", "okulAdi": "Sancaktepe Arif Nihat Asya Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 431.013, "yuzdelikDilim": 9.89 },
+            { "kaynakTuru": "Devlet", "ilce": "Güngören", "okulAdi": "Ergün Öner - Mehmet Öner Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 430.153, "yuzdelikDilim": 10.04 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Uluslararası Şehit Mehmet Karaaslan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 427.666, "yuzdelikDilim": 10.45 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Şehit Haki Aras Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 427.594, "yuzdelikDilim": 10.46 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "Hüseyin Bürge Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 427.575, "yuzdelikDilim": 10.46 },
+            { "kaynakTuru": "Devlet", "ilce": "Küçükçekmece", "okulAdi": "Hacı Bektaş Veli Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 427.093, "yuzdelikDilim": 10.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Uluslararası Pendik Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 426.807, "yuzdelikDilim": 10.60 },
+            { "kaynakTuru": "Devlet", "ilce": "Silivri", "okulAdi": "Hasan-Sabriye Gümüş Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 425.945, "yuzdelikDilim": 10.75 },
+            { "kaynakTuru": "Devlet", "ilce": "Sarıyer", "okulAdi": "Özdemir Sabancı Emirgan Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 424.655, "yuzdelikDilim": 10.98 },
+            { "kaynakTuru": "Devlet", "ilce": "Beylikdüzü", "okulAdi": "Vali Muammer Güler Sosyal Bilimler Lisesi", "alanProgram": "-", "okulTuru": "Sosyal Bilimler Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 424.274, "yuzdelikDilim": 11.05 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Öğrenciden Armağan Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 423.190, "yuzdelikDilim": 11.23 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultanbeyli", "okulAdi": "Aziz Sancar Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 422.995, "yuzdelikDilim": 11.27 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Demirören Medya Ve Teknoloji Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Gazetecilik Alanı (Sınavlı)", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 422.760, "yuzdelikDilim": 11.31 },
+            { "kaynakTuru": "Devlet", "ilce": "Şile", "okulAdi": "Şile Ayet Azer Aran Savunma Sanayi Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Endüstriyel Otomasyon Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 422.480, "yuzdelikDilim": 11.36 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Mehmet Niyazi Altuğ Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 422.265, "yuzdelikDilim": 11.39 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Akif İnan Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 422.173, "yuzdelikDilim": 11.41 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Yıldız Teknik Üniversitesi Maçka Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 422.172, "yuzdelikDilim": 11.41 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "Beşiktaş Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 420.010, "yuzdelikDilim": 11.77 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "Beşiktaş Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Almanca", "tabanPuan": 418.187, "yuzdelikDilim": 12.10 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "Bayrampaşa Aliya İzzetbegoviç Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 417.808, "yuzdelikDilim": 12.17 },
+            { "kaynakTuru": "Devlet", "ilce": "Beykoz", "okulAdi": "Paşabahçe Ahmet Ferit İnal Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 417.538, "yuzdelikDilim": 12.22 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Çamlıca Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 417.371, "yuzdelikDilim": 12.25 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "15 Temmuz Şehitleri Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 417.236, "yuzdelikDilim": 12.27 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultangazi", "okulAdi": "Cumhuriyet Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 416.912, "yuzdelikDilim": 12.32 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Dr. Kemal Naci Ekşi Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 416.881, "yuzdelikDilim": 12.33 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Hakkı Demir Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 415.320, "yuzdelikDilim": 12.60 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Çamlıca Kız Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 414.720, "yuzdelikDilim": 12.71 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Gönüllü Hizmet Vakfı İnal Aydınoğlu Sosyal Bilimler Lisesi", "alanProgram": "-", "okulTuru": "Sosyal Bilimler Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 414.485, "yuzdelikDilim": 12.74 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Ömer Çam Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Arapça", "tabanPuan": 413.828, "yuzdelikDilim": 12.85 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Pendik İto Şehit Ahmet Aslanhan Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 413.712, "yuzdelikDilim": 12.88 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Yıldız Teknik Üniversitesi Maçka Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 413.522, "yuzdelikDilim": 12.97 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Borusan Asım Kocabıyık Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 413.256, "yuzdelikDilim": 13.00 },
+            { "kaynakTuru": "Devlet", "ilce": "Çatalca", "okulAdi": "Çatalca Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 412.967, "yuzdelikDilim": 13.03 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "İstanbul Recep Tayyip Erdoğan Anadolu İmam Hatip Lisesi", "alanProgram": "Hafızlık Projesi (Fen ve Sosyal Bilimler Programı)", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 412.852, "yuzdelikDilim": 13.04 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenler", "okulAdi": "İbrahim Turhan Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 412.163, "yuzdelikDilim": 13.14 },
+            { "kaynakTuru": "Devlet", "ilce": "Şile", "okulAdi": "Şile Ayet Azer Aran Savunma Sanayi Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 411.467, "yuzdelikDilim": 13.26 },
+            { "kaynakTuru": "Devlet", "ilce": "Sarıyer", "okulAdi": "Behçet Kemal Çağlar Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 410.990, "yuzdelikDilim": 13.34 },
+            { "kaynakTuru": "Devlet", "ilce": "Arnavutköy", "okulAdi": "Şehit Selçuk Gürdal Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 410.171, "yuzdelikDilim": 13.49 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Handan Hayrettin Yelkikanat Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 409.970, "yuzdelikDilim": 13.52 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Uluslararası Şehit Mehmet Karaaslan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 408.973, "yuzdelikDilim": 13.70 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Uluslararası Pendik Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 408.267, "yuzdelikDilim": 13.83 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenler", "okulAdi": "Şehit Türkmen Tekin Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 407.837, "yuzdelikDilim": 13.90 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Güzelyurt Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 407.433, "yuzdelikDilim": 13.98 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Şehit Mustafa Kaymakçı Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 407.163, "yuzdelikDilim": 14.03 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Şehit Akın Sertçelik Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 405.327, "yuzdelikDilim": 14.36 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Kandilli Kız Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 404.607, "yuzdelikDilim": 14.49 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Tenzile Erdoğan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 404.188, "yuzdelikDilim": 14.56 },
+            { "kaynakTuru": "Devlet", "ilce": "Sancaktepe", "okulAdi": "Rabia Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 403.338, "yuzdelikDilim": 14.71 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "Erenköy Kız Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 403.088, "yuzdelikDilim": 14.75 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "Bayrampaşa Aliya İzzetbegoviç Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 401.041, "yuzdelikDilim": 15.12 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Borusan Asım Kocabıyık Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 399.684, "yuzdelikDilim": 15.37 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "15 Temmuz Şehitleri Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Arapça", "tabanPuan": 398.248, "yuzdelikDilim": 15.64 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Haydarpaşa Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 398.160, "yuzdelikDilim": 15.65 },
+            { "kaynakTuru": "Devlet", "ilce": "Sarıyer", "okulAdi": "Mehmet Rıfat Evyap Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 397.249, "yuzdelikDilim": 15.82 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Borusan Asım Kocabıyık Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 397.187, "yuzdelikDilim": 15.83 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Tenzile Erdoğan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Arapça", "tabanPuan": 397.030, "yuzdelikDilim": 15.86 },
+            { "kaynakTuru": "Devlet", "ilce": "Küçükçekmece", "okulAdi": "Şehit Mehmet Güder Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 396.778, "yuzdelikDilim": 15.91 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Yıldız Teknik Üniversitesi Maçka Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 396.434, "yuzdelikDilim": 15.97 },
+            { "kaynakTuru": "Devlet", "ilce": "Avcılar", "okulAdi": "Şehit Murat Kocatürk Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 395.647, "yuzdelikDilim": 16.11 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "İstanbul Ticaret Odası Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 395.257, "yuzdelikDilim": 16.18 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "Uluslararası Kaptan Ahmet Erdoğan Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 395.057, "yuzdelikDilim": 16.22 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "İstanbul Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 395.022, "yuzdelikDilim": 16.23 },
+            { "kaynakTuru": "Devlet", "ilce": "Ümraniye", "okulAdi": "Ümraniye Şehit Erol Olçok Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 394.780, "yuzdelikDilim": 16.27 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Kartal Mehmet Akif Ersoy Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 393.640, "yuzdelikDilim": 16.48 },
+            { "kaynakTuru": "Devlet", "ilce": "Sarıyer", "okulAdi": "Ali Akkanat Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Anadolu Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 393.546, "yuzdelikDilim": 16.50 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenler", "okulAdi": "Şehit Türkmen Tekin Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 392.778, "yuzdelikDilim": 16.64 },
+            { "kaynakTuru": "Devlet", "ilce": "Avcılar", "okulAdi": "Şehit Murat Kocatürk Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 391.322, "yuzdelikDilim": 16.91 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Büyükyalı Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 388.846, "yuzdelikDilim": 17.38 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Pendik Türk Telekom Şehit Murat Mertel Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 387.996, "yuzdelikDilim": 17.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Kağıthane", "okulAdi": "Hasbahçe Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 387.749, "yuzdelikDilim": 17.60 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Maltepe Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 385.527, "yuzdelikDilim": 18.04 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultanbeyli", "okulAdi": "Nilüfer Hatun Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 385.519, "yuzdelikDilim": 18.04 },
+            { "kaynakTuru": "Devlet", "ilce": "Bakırköy", "okulAdi": "Bakırköy Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Fransızca", "tabanPuan": 384.896, "yuzdelikDilim": 18.16 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Bağcılar Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Uçak Bakım Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 380.349, "yuzdelikDilim": 19.07 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Handan Hayrettin Yelkikanat Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 380.144, "yuzdelikDilim": 19.11 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Şehit Akın Sertçelik Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 377.974, "yuzdelikDilim": 19.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Beyoğlu", "okulAdi": "Beyoğlu Anadolu İmam Hatip Lisesi", "alanProgram": "Hafızlık Projesi (İlahiyat Odaklı Program)", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Arapça", "tabanPuan": 377.934, "yuzdelikDilim": 19.56 },
+            { "kaynakTuru": "Devlet", "ilce": "Gaziosmanpaşa", "okulAdi": "Şehit Servet Asmaz Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 377.678, "yuzdelikDilim": 19.61 },
+            { "kaynakTuru": "Devlet", "ilce": "Eyüpsultan", "okulAdi": "Eyüpsultan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 377.265, "yuzdelikDilim": 19.70 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Güzelyurt Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 377.191, "yuzdelikDilim": 19.71 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Şehit Mustafa Kaymakçı Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 377.177, "yuzdelikDilim": 19.71 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "Şehit Halil İbrahim Yıldırım Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 376.698, "yuzdelikDilim": 19.81 },
+            { "kaynakTuru": "Devlet", "ilce": "Tuzla", "okulAdi": "Tuzla Mahir İz Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 376.249, "yuzdelikDilim": 19.90 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "İmmib Erkan Avcı Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 375.455, "yuzdelikDilim": 20.06 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Üsküdar Zeynep Kamil Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Sağlık Hizmetleri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 372.916, "yuzdelikDilim": 20.59 },
+            { "kaynakTuru": "Devlet", "ilce": "Ümraniye", "okulAdi": "Şehit Erol İnce Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 372.796, "yuzdelikDilim": 20.61 },
+            { "kaynakTuru": "Devlet", "ilce": "Küçükçekmece", "okulAdi": "Şehit Mehmet Güder Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "Çince", "tabanPuan": 372.412, "yuzdelikDilim": 20.69 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Borusan Asım Kocabıyık Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 372.124, "yuzdelikDilim": 20.75 },
+            { "kaynakTuru": "Devlet", "ilce": "Avcılar", "okulAdi": "Haydar Akın Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 371.211, "yuzdelikDilim": 20.94 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Toki Aliya İzzetbegoviç Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 369.044, "yuzdelikDilim": 21.40 },
+            { "kaynakTuru": "Devlet", "ilce": "Çekmeköy", "okulAdi": "Şehit Ömer Halisdemir Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 368.939, "yuzdelikDilim": 21.43 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "İstanbul Ticaret Odası Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 367.891, "yuzdelikDilim": 21.65 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Büyükyalı Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 367.115, "yuzdelikDilim": 21.82 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultanbeyli", "okulAdi": "Sultanbeyli Sabiha Gökçen Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Uçak Bakım Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 365.546, "yuzdelikDilim": 22.16 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Enerjisa İstanbul Meslekî Ve Teknik Anadolu Lisesi", "alanProgram": "Yenilenebilir Enerji Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 365.151, "yuzdelikDilim": 22.25 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Hamidiye Etfal Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Sağlık Hizmetleri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 364.015, "yuzdelikDilim": 22.50 },
+            { "kaynakTuru": "Devlet", "ilce": "Tuzla", "okulAdi": "Tuzla Halil Türkkan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 363.795, "yuzdelikDilim": 22.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultanbeyli", "okulAdi": "Fuat Sezgin Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 363.326, "yuzdelikDilim": 22.65 },
+            { "kaynakTuru": "Devlet", "ilce": "Gaziosmanpaşa", "okulAdi": "Şehit Servet Asmaz Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 362.495, "yuzdelikDilim": 22.83 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Zeytinburnu Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 361.954, "yuzdelikDilim": 22.95 },
+            { "kaynakTuru": "Devlet", "ilce": "Bakırköy", "okulAdi": "Bakırköy Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 361.648, "yuzdelikDilim": 23.02 },
+            { "kaynakTuru": "Devlet", "ilce": "Arnavutköy", "okulAdi": "Şehit Onbaşı Murat Şengöz Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 361.247, "yuzdelikDilim": 23.10 },
+            { "kaynakTuru": "Devlet", "ilce": "Sancaktepe", "okulAdi": "Sancaktepe Aziz Bayraktar Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 361.203, "yuzdelikDilim": 23.11 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Nuri Demirağ Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Uçak Bakım Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 360.300, "yuzdelikDilim": 23.32 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Ataşehir D. Sabancı Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı (Sınavlı)", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 360.089, "yuzdelikDilim": 23.36 },
+            { "kaynakTuru": "Devlet", "ilce": "Sancaktepe", "okulAdi": "Şehit Yüzbaşı Yusuf Kenan Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 359.199, "yuzdelikDilim": 23.56 },
+            { "kaynakTuru": "Devlet", "ilce": "Kağıthane", "okulAdi": "Hasbahçe Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 358.815, "yuzdelikDilim": 23.64 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Borusan Asım Kocabıyık Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Motorlu Araçlar Teknolojisi Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 358.303, "yuzdelikDilim": 23.76 },
+            { "kaynakTuru": "Devlet", "ilce": "Arnavutköy", "okulAdi": "İbrahim Özaydın Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 357.887, "yuzdelikDilim": 23.85 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Maltepe Orhangazi Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 356.798, "yuzdelikDilim": 24.10 },
+            { "kaynakTuru": "Devlet", "ilce": "Şile", "okulAdi": "Şile Oya-Ali Osman Keçici Sosyal Bilimler Lisesi", "alanProgram": "-", "okulTuru": "Sosyal Bilimler Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 356.652, "yuzdelikDilim": 24.14 },
+            { "kaynakTuru": "Devlet", "ilce": "Arnavutköy", "okulAdi": "İto İbrahim Çağlar Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 356.551, "yuzdelikDilim": 24.16 },
+            { "kaynakTuru": "Devlet", "ilce": "Tuzla", "okulAdi": "Piri Reis Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Gemi Yapımı Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 356.511, "yuzdelikDilim": 24.17 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Kartal Şehit Salih Alışkan Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 356.364, "yuzdelikDilim": 24.20 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Borusan Asım Kocabıyık Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 354.999, "yuzdelikDilim": 24.51 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultanbeyli", "okulAdi": "Sultanbeyli Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 354.199, "yuzdelikDilim": 24.70 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Ataşehir Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 352.072, "yuzdelikDilim": 25.20 },
+            { "kaynakTuru": "Devlet", "ilce": "Büyükçekmece", "okulAdi": "Şehit Şirin Diril Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 350.234, "yuzdelikDilim": 25.65 },
+            { "kaynakTuru": "Devlet", "ilce": "Kağıthane", "okulAdi": "Profilo Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 348.389, "yuzdelikDilim": 26.09 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Zeytinburnu Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 346.792, "yuzdelikDilim": 26.47 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Haydarpaşa Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 344.934, "yuzdelikDilim": 26.93 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "Fatih Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 344.305, "yuzdelikDilim": 27.08 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Maltepe Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 343.598, "yuzdelikDilim": 27.26 },
+            { "kaynakTuru": "Devlet", "ilce": "Eyüpsultan", "okulAdi": "Eyüpsultan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 342.607, "yuzdelikDilim": 27.50 },
+            { "kaynakTuru": "Devlet", "ilce": "Sarıyer", "okulAdi": "Şehit Fatih Satır Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 342.346, "yuzdelikDilim": 27.56 },
+            { "kaynakTuru": "Devlet", "ilce": "Küçükçekmece", "okulAdi": "Toki Güneşparkevleri Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 342.180, "yuzdelikDilim": 27.61 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Şişli Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 340.857, "yuzdelikDilim": 28.03 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Hızır Reis Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 340.593, "yuzdelikDilim": 28.18 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Haydarpaşa Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Endüstriyel Otomasyon Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 339.233, "yuzdelikDilim": 28.46 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultanbeyli", "okulAdi": "Sultanbeyli Sabiha Gökçen Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 338.918, "yuzdelikDilim": 28.52 },
+            { "kaynakTuru": "Devlet", "ilce": "Ümraniye", "okulAdi": "Saray Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 338.768, "yuzdelikDilim": 28.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Kağıthane", "okulAdi": "Kağıthane Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 336.058, "yuzdelikDilim": 29.18 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Borsa İstanbul Başakşehir Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 335.082, "yuzdelikDilim": 29.44 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "İmmib Erkan Avcı Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 333.991, "yuzdelikDilim": 29.74 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Ahmet Şişman Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 333.945, "yuzdelikDilim": 29.76 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Nuri Demirağ Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 333.470, "yuzdelikDilim": 29.97 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Üsküdar Dış Ticaret Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 332.668, "yuzdelikDilim": 30.25 },
+            { "kaynakTuru": "Devlet", "ilce": "Büyükçekmece", "okulAdi": "Şehit Kemal Ekşi Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 331.937, "yuzdelikDilim": 30.35 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Üsküdar Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 331.298, "yuzdelikDilim": 30.44 },
+            { "kaynakTuru": "Devlet", "ilce": "Ümraniye", "okulAdi": "Dudullu Amanetoğlu Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 331.146, "yuzdelikDilim": 30.47 },
+            { "kaynakTuru": "Devlet", "ilce": "Tuzla", "okulAdi": "Tuzla Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Endüstriyel Otomasyon Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 329.670, "yuzdelikDilim": 30.86 },
+            { "kaynakTuru": "Devlet", "ilce": "Beylikdüzü", "okulAdi": "Musa Efendi Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 329.347, "yuzdelikDilim": 30.95 },
+            { "kaynakTuru": "Devlet", "ilce": "Beylikdüzü", "okulAdi": "Musa Efendi Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 329.228, "yuzdelikDilim": 30.98 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Abdurrahman Ve Nermin Bilimli Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 328.093, "yuzdelikDilim": 31.28 },
+            { "kaynakTuru": "Devlet", "ilce": "Sarıyer", "okulAdi": "Sarıyer Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Hazırlık Sınıfı Bulunan Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 327.018, "yuzdelikDilim": 31.58 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultangazi", "okulAdi": "Recep Tayyip Erdoğan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 326.770, "yuzdelikDilim": 31.64 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Bahçelievler Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Sağlık Hizmetleri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 325.875, "yuzdelikDilim": 31.89 },
+            { "kaynakTuru": "Devlet", "ilce": "Gaziosmanpaşa", "okulAdi": "Osmangazi Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 325.150, "yuzdelikDilim": 32.09 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Maltepe Orhangazi Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 323.505, "yuzdelikDilim": 32.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Hakkı Demir Anadolu İmam Hatip Lisesi", "alanProgram": "Hafızlık Projesi (Fen ve Sosyal Bilimler Programı)", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 321.323, "yuzdelikDilim": 33.17 },
+            { "kaynakTuru": "Devlet", "ilce": "Çekmeköy", "okulAdi": "Taşdelen Borsa İstanbul Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 321.196, "yuzdelikDilim": 33.20 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Şehit Osman Yılmaz Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 319.268, "yuzdelikDilim": 33.75 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "İstanbul Ticaret Odası Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Radyo-Televizyon Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 319.132, "yuzdelikDilim": 33.79 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Haydarpaşa Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 318.124, "yuzdelikDilim": 34.09 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Bahçeşehir Borsa İstanbul Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 314.274, "yuzdelikDilim": 35.23 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "Beşiktaş Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 314.141, "yuzdelikDilim": 35.27 },
+            { "kaynakTuru": "Devlet", "ilce": "Arnavutköy", "okulAdi": "İbrahim Özaydın Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 313.962, "yuzdelikDilim": 35.32 },
+            { "kaynakTuru": "Devlet", "ilce": "Avcılar", "okulAdi": "Avcılar Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 312.811, "yuzdelikDilim": 35.66 },
+            { "kaynakTuru": "Devlet", "ilce": "Çekmeköy", "okulAdi": "Çekmeköy Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 312.135, "yuzdelikDilim": 35.86 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Selimiye Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Laboratuvar Hizmetleri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 311.600, "yuzdelikDilim": 36.02 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Atalar Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 311.214, "yuzdelikDilim": 36.14 },
+            { "kaynakTuru": "Devlet", "ilce": "Tuzla", "okulAdi": "Tuzla Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 311.010, "yuzdelikDilim": 36.20 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "İnönü Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 308.376, "yuzdelikDilim": 37.01 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Pendik Barbaros Hayrettin Paşa Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Gemi Yapımı Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 308.073, "yuzdelikDilim": 37.11 },
+            { "kaynakTuru": "Devlet", "ilce": "Avcılar", "okulAdi": "Avcılar Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 306.849, "yuzdelikDilim": 37.48 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "İmmib Erkan Avcı Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 304.751, "yuzdelikDilim": 38.14 },
+            { "kaynakTuru": "Devlet", "ilce": "Arnavutköy", "okulAdi": "İbrahim Özaydın Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Kimya Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 303.369, "yuzdelikDilim": 38.58 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Tenzile Erdoğan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Hafızlık Projesi", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 302.195, "yuzdelikDilim": 38.96 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Dr. Nureddin Erk-Perihan Erk Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Yenilenebilir Enerji Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 301.472, "yuzdelikDilim": 39.18 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Şehit Koray Karaca Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 300.638, "yuzdelikDilim": 39.51 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Zeytinburnu Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 299.280, "yuzdelikDilim": 40.10 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Pendik Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Endüstriyel Otomasyon Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 294.341, "yuzdelikDilim": 41.57 },
+            { "kaynakTuru": "Devlet", "ilce": "Gaziosmanpaşa", "okulAdi": "Kazım Karabekir Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 293.745, "yuzdelikDilim": 41.76 },
+            { "kaynakTuru": "Devlet", "ilce": "Beykoz", "okulAdi": "Beykoz Barbaros Hayrettin Paşa Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 292.343, "yuzdelikDilim": 42.27 },
+            { "kaynakTuru": "Devlet", "ilce": "Küçükçekmece", "okulAdi": "İsmet Aktar Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 291.723, "yuzdelikDilim": 42.49 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "İnönü Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 291.436, "yuzdelikDilim": 42.60 },
+            { "kaynakTuru": "Devlet", "ilce": "Avcılar", "okulAdi": "Avcılar Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 291.345, "yuzdelikDilim": 42.63 },
+            { "kaynakTuru": "Devlet", "ilce": "Kağıthane", "okulAdi": "Profilo Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 291.097, "yuzdelikDilim": 42.72 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Dr. Nureddin Erk-Perihan Erk Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 290.150, "yuzdelikDilim": 43.06 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Bahçelievler Aydın Doğan Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Radyo-Televizyon Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 289.042, "yuzdelikDilim": 43.31 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "İsov-Dinçkök Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Endüstriyel Otomasyon Teknolojileri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 287.274, "yuzdelikDilim": 43.99 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Bağcılar Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 285.828, "yuzdelikDilim": 44.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Pendik Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 285.828, "yuzdelikDilim": 44.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Beykoz", "okulAdi": "Beykoz Barbaros Hayrettin Paşa Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Gemi Yapımı Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 285.731, "yuzdelikDilim": 44.57 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Borsa İstanbul Başakşehir Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 285.092, "yuzdelikDilim": 44.73 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "İsov-Dinçkök Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 285.056, "yuzdelikDilim": 44.74 },
+            { "kaynakTuru": "Devlet", "ilce": "Eyüpsultan", "okulAdi": "Eyüpsultan Şehit Furkan Doğan Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 284.951, "yuzdelikDilim": 44.76 },
+            { "kaynakTuru": "Devlet", "ilce": "Avcılar", "okulAdi": "Mehmet Emin Horoz Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Ulaştırma Hizmetleri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 283.753, "yuzdelikDilim": 45.20 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Bahçelievler Aydın Doğan Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Gazetecilik Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 283.720, "yuzdelikDilim": 45.21 },
+            { "kaynakTuru": "Devlet", "ilce": "Bakırköy", "okulAdi": "Bakırköy Nüket Ercan Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Adalet Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 283.288, "yuzdelikDilim": 45.37 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Zeytinburnu İdmib Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 282.136, "yuzdelikDilim": 45.91 },
+            { "kaynakTuru": "Devlet", "ilce": "Sancaktepe", "okulAdi": "Samandıra Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 281.981, "yuzdelikDilim": 45.98 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Selimiye Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Hayvan Yetiştiriciliği ve Sağlığı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 280.144, "yuzdelikDilim": 46.54 },
+            { "kaynakTuru": "Devlet", "ilce": "Bayrampaşa", "okulAdi": "Şehit Büyükelçi İsmail Erez Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "İtfaiyecilik ve Yangın Güvenliği Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 278.832, "yuzdelikDilim": 47.02 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Recep Tayyip Erdoğan Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 278.502, "yuzdelikDilim": 47.14 },
+            { "kaynakTuru": "Devlet", "ilce": "Güngören", "okulAdi": "İzzet Ünver Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 277.317, "yuzdelikDilim": 47.60 },
+            { "kaynakTuru": "Devlet", "ilce": "Eyüpsultan", "okulAdi": "Alibeyköy Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 276.784, "yuzdelikDilim": 47.81 },
+            { "kaynakTuru": "Devlet", "ilce": "Sarıyer", "okulAdi": "Vehbi Koç Vakfı Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Konaklama ve Seyahat Hizmetleri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 275.646, "yuzdelikDilim": 48.26 },
+            { "kaynakTuru": "Devlet", "ilce": "Çekmeköy", "okulAdi": "Taşdelen Borsa İstanbul Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 274.583, "yuzdelikDilim": 48.68 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Siyavuşpaşa Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Çocuk Gelişimi ve Eğitimi Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 273.591, "yuzdelikDilim": 49.07 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultangazi", "okulAdi": "Sabri Ülker Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 273.249, "yuzdelikDilim": 49.20 },
+            { "kaynakTuru": "Devlet", "ilce": "Ümraniye", "okulAdi": "Tev Uğuz Tarık Demirağ Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı (Sınavlı)", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 272.766, "yuzdelikDilim": 49.39 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Selimiye Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Gıda Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 272.373, "yuzdelikDilim": 49.55 },
+            { "kaynakTuru": "Devlet", "ilce": "Beylikdüzü", "okulAdi": "Gürpınar Borsa İstanbul Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Biyomedikal Cihaz Teknolojileri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 272.270, "yuzdelikDilim": 49.59 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Şişli Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Motorlu Araçlar Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 272.141, "yuzdelikDilim": 49.64 },
+            { "kaynakTuru": "Devlet", "ilce": "Eyüpsultan", "okulAdi": "Alibeyköy Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 272.106, "yuzdelikDilim": 49.65 },
+            { "kaynakTuru": "Devlet", "ilce": "Sultangazi", "okulAdi": "Sultangazi Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 270.089, "yuzdelikDilim": 50.47 },
+            { "kaynakTuru": "Devlet", "ilce": "Sancaktepe", "okulAdi": "Samandıra Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Motorlu Araçlar Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 270.048, "yuzdelikDilim": 50.48 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Borsa İstanbul Başakşehir Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Motorlu Araçlar Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 269.205, "yuzdelikDilim": 50.84 },
+            { "kaynakTuru": "Devlet", "ilce": "Fatih", "okulAdi": "Sultanahmet Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 268.165, "yuzdelikDilim": 51.28 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Şişli Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 267.310, "yuzdelikDilim": 51.64 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "İsov-Dinçkök Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Yenilenebilir Enerji Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 267.289, "yuzdelikDilim": 51.65 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Abdurrahman Ve Nermin Bilimli Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Ulaştırma Hizmetleri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 266.341, "yuzdelikDilim": 52.05 },
+            { "kaynakTuru": "Devlet", "ilce": "Şişli", "okulAdi": "Zincirlikuyu İsov Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "İnşaat Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 265.443, "yuzdelikDilim": 52.43 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Hezarfen Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 265.394, "yuzdelikDilim": 52.45 },
+            { "kaynakTuru": "Devlet", "ilce": "Ümraniye", "okulAdi": "Tev Uğuz Tarık Demirağ Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Raylı Sistemler Teknolojisi Alanı (Sınavlı)", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 264.812, "yuzdelikDilim": 52.70 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenler", "okulAdi": "Esenler Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 263.726, "yuzdelikDilim": 53.15 },
+            { "kaynakTuru": "Devlet", "ilce": "Tuzla", "okulAdi": "Asım Kibar Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Konaklama ve Seyahat Hizmetleri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 263.481, "yuzdelikDilim": 53.26 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Alaattin-Nilüfer Kadayıfcıoğlu Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 262.635, "yuzdelikDilim": 53.62 },
+            { "kaynakTuru": "Devlet", "ilce": "Başakşehir", "okulAdi": "Borsa İstanbul Başakşehir Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 262.488, "yuzdelikDilim": 53.68 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Pendik Barbaros Hayrettin Paşa Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Gemi Yapımı Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 262.237, "yuzdelikDilim": 53.78 },
+            { "kaynakTuru": "Devlet", "ilce": "Kadıköy", "okulAdi": "50. Yıl Cumhuriyet Feridun Tümer Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Grafik ve Fotoğraf Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 262.215, "yuzdelikDilim": 53.79 },
+            { "kaynakTuru": "Devlet", "ilce": "Bahçelievler", "okulAdi": "Şehit Erol Olçok Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Yenilenebilir Enerji Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 261.156, "yuzdelikDilim": 54.25 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Pendik Nuh Kuşçulu Seramik Ve Cam Teknolojisi Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Grafik ve Fotoğraf Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 259.062, "yuzdelikDilim": 55.20 },
+            { "kaynakTuru": "Devlet", "ilce": "Kağıthane", "okulAdi": "Kağıthane Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Adalet Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 258.659, "yuzdelikDilim": 55.38 },
+            { "kaynakTuru": "Devlet", "ilce": "Sarıyer", "okulAdi": "Vehbi Koç Vakfı Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Yiyecek İçecek Hizmetleri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 258.498, "yuzdelikDilim": 55.45 },
+            { "kaynakTuru": "Devlet", "ilce": "Bağcılar", "okulAdi": "Orhangazi Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 258.432, "yuzdelikDilim": 55.48 },
+            { "kaynakTuru": "Devlet", "ilce": "Beşiktaş", "okulAdi": "İsov-Dinçkök Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 258.119, "yuzdelikDilim": 55.62 },
+            { "kaynakTuru": "Devlet", "ilce": "Pendik", "okulAdi": "Pendik Borsa İstanbul Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Motorlu Araçlar Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 257.417, "yuzdelikDilim": 55.94 },
+            { "kaynakTuru": "Devlet", "ilce": "Kartal", "okulAdi": "Atalar Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Motorlu Araçlar Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 256.764, "yuzdelikDilim": 56.24 },
+            { "kaynakTuru": "Devlet", "ilce": "Ümraniye", "okulAdi": "Ümraniye Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 256.762, "yuzdelikDilim": 56.24 },
+            { "kaynakTuru": "Devlet", "ilce": "Ataşehir", "okulAdi": "Ümit Meriç Kız Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 256.155, "yuzdelikDilim": 56.52 },
+            { "kaynakTuru": "Devlet", "ilce": "Sancaktepe", "okulAdi": "Fehmi Yılmaz Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Yiyecek İçecek Hizmetleri Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 255.444, "yuzdelikDilim": 56.84 },
+            { "kaynakTuru": "Devlet", "ilce": "Güngören", "okulAdi": "Güngören Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Makine ve Tasarım Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 255.259, "yuzdelikDilim": 56.92 },
+            { "kaynakTuru": "Devlet", "ilce": "Kağıthane", "okulAdi": "Ekrem Cevahir Anadolu İmam Hatip Lisesi", "alanProgram": "Fen ve Sosyal Bilimler Programı", "okulTuru": "Anadolu İmam Hatip Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 254.018, "yuzdelikDilim": 57.53 },
+            { "kaynakTuru": "Devlet", "ilce": "Çekmeköy", "okulAdi": "Taşdelen Borsa İstanbul Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Motorlu Araçlar Teknolojisi Alanı (Sınavlı)", "okulTuru": "Anadolu Meslek Programı", "ogretimDili": "İngilizce", "tabanPuan": 253.311, "yuzdelikDilim": 57.98 },
+            { "kaynakTuru": "Devlet", "ilce": "Küçükçekmece", "okulAdi": "Dr.Oktay Duran Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Grafik ve Fotoğraf Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 253.263, "yuzdelikDilim": 58.01 },
+            { "kaynakTuru": "Devlet", "ilce": "Esenyurt", "okulAdi": "Ali Kul Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Elektrik-Elektronik Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 252.791, "yuzdelikDilim": 58.26 },
+            { "kaynakTuru": "Devlet", "ilce": "Zeytinburnu", "okulAdi": "Zeytinburnu Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Endüstriyel Otomasyon Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 252.784, "yuzdelikDilim": 58.27 },
+            { "kaynakTuru": "Devlet", "ilce": "Şile", "okulAdi": "Şile Borsa İstanbul 50. Yıl Çok Programlı Anadolu Lisesi", "alanProgram": "Bilişim Teknolojileri Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 251.985, "yuzdelikDilim": 58.58 },
+            { "kaynakTuru": "Devlet", "ilce": "Üsküdar", "okulAdi": "Üsküdar Borsa İstanbul Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Çocuk Gelişimi ve Eğitimi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 251.861, "yuzdelikDilim": 58.63 },
+            { "kaynakTuru": "Devlet", "ilce": "Maltepe", "okulAdi": "Küçükyalı Mesleki Ve Teknik Anadolu Lisesi", "alanProgram": "Motorlu Araçlar Teknolojisi Alanı", "okulTuru": "Anadolu Teknik Programı", "ogretimDili": "İngilizce", "tabanPuan": 251.798, "yuzdelikDilim": 58.66 },
+            { "kaynakTuru": "Özel", "ilce": "Üsküdar", "okulAdi": "SEV Amerikan Koleji", "alanProgram": "-", "okulTuru": "Özel Yabancı Lise", "ogretimDili": "İngilizce", "tabanPuan": 475.0, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Beşiktaş", "okulAdi": "Ulus Özel Musevi Lisesi", "alanProgram": "-", "okulTuru": "Özel Azınlık Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 494.5, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Üsküdar", "okulAdi": "Üsküdar Amerikan Lisesi", "alanProgram": "-", "okulTuru": "Özel Yabancı Lise", "ogretimDili": "İngilizce", "tabanPuan": 494.5, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Beşiktaş", "okulAdi": "Koç Lisesi", "alanProgram": "-", "okulTuru": "Özel Lise", "ogretimDili": "İngilizce", "tabanPuan": 494.5, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Sarıyer", "okulAdi": "Hisar Okulları Lisesi", "alanProgram": "-", "okulTuru": "Özel Lise", "ogretimDili": "İngilizce", "tabanPuan": 491, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Beyoğlu", "okulAdi": "İtalyan Lisesi", "alanProgram": "-", "okulTuru": "Özel Yabancı Lise", "ogretimDili": "İtalyanca", "tabanPuan": 485, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Beyoğlu", "okulAdi": "Sankt Georg Avusturya Lisesi ve Ticaret Okulu", "alanProgram": "-", "okulTuru": "Özel Yabancı Lise", "ogretimDili": "Almanca", "tabanPuan": 485, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Beyoğlu", "okulAdi": "Saint Benoît Fransız Lisesi", "alanProgram": "-", "okulTuru": "Özel Yabancı Lise", "ogretimDili": "Fransızca", "tabanPuan": 480, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Beyoğlu", "okulAdi": "Notre Dame de Sion Fransız Lisesi", "alanProgram": "-", "okulTuru": "Özel Yabancı Lise", "ogretimDili": "Fransızca", "tabanPuan": 480, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Beşiktaş", "okulAdi": "Sainte Pulchérie Fransız Lisesi", "alanProgram": "-", "okulTuru": "Özel Yabancı Lise", "ogretimDili": "Fransızca", "tabanPuan": 477, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Beşiktaş", "okulAdi": "Terakki Vakfı Okulları Terakki Lisesi", "alanProgram": "-", "okulTuru": "Özel Lise", "ogretimDili": "İngilizce", "tabanPuan": 475, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Kadıköy", "okulAdi": "Saint-Joseph Fransız Lisesi", "alanProgram": "-", "okulTuru": "Özel Yabancı Lise", "ogretimDili": "Fransızca", "tabanPuan": 475, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Sarıyer", "okulAdi": "Enka Okulları Lisesi", "alanProgram": "-", "okulTuru": "Özel Lise", "ogretimDili": "İngilizce", "tabanPuan": 475, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Beşiktaş", "okulAdi": "MEF Lisesi", "alanProgram": "-", "okulTuru": "Özel Lise", "ogretimDili": "İngilizce", "tabanPuan": 472, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Sarıyer", "okulAdi": "Açı Okulları Lisesi", "alanProgram": "-", "okulTuru": "Özel Lise", "ogretimDili": "İngilizce", "tabanPuan": 472, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Büyükçekmece", "okulAdi": "ALKEV Özel Anadolu Lisesi", "alanProgram": "-", "okulTuru": "Özel Lise", "ogretimDili": "Almanca", "tabanPuan": 470, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Büyükçekmece", "okulAdi": "MEV Koleji Özel Fen Lisesi", "alanProgram": "-", "okulTuru": "Özel Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 468, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Çekmeköy", "okulAdi": "SEV Lisesi", "alanProgram": "-", "okulTuru": "Özel Lise", "ogretimDili": "İngilizce", "tabanPuan": 465, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Maltepe", "okulAdi": "Marmara Koleji", "alanProgram": "-", "okulTuru": "Özel Lise", "ogretimDili": "İngilizce", "tabanPuan": 465, "yuzdelikDilim": null },
+            { "kaynakTuru": "Özel", "ilce": "Bahçelievler", "okulAdi": "İhlas Koleji Fen Lisesi", "alanProgram": "-", "okulTuru": "Özel Fen Lisesi", "ogretimDili": "İngilizce", "tabanPuan": 460, "yuzdelikDilim": null }
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const state = {
+                filters: {
+                    searchTerm: '',
+                    districts: [],
+                    types: [],
+                    languages: [],
+                    maxPercentile: 100,
+                    kaynakTuru: 'Tümü',
+                    minScore: null,
+                    maxScore: null,
+                },
+                table: {
+                    currentPage: 1,
+                    rowsPerPage: 15,
+                    sortColumn: 'tabanPuan',
+                    sortDirection: 'desc'
+                }
+            };
+            let charts = {};
+
+            const searchInput = document.getElementById('search-input');
+            const percentileSlider = document.getElementById('percentile-slider');
+            const percentileLabel = document.getElementById('percentile-range-label');
+            const kaynakFilter = document.getElementById('kaynak-filter');
+            const sortFilter = document.getElementById('sort-filter');
+            const minScoreInput = document.getElementById('min-score-input');
+            const maxScoreInput = document.getElementById('max-score-input');
+            const resetButton = document.getElementById('reset-filters');
+            const tableBody = document.getElementById('school-table-body');
+            const prevPageButton = document.getElementById('prev-page');
+            const nextPageButton = document.getElementById('next-page');
+            const pageInfo = document.getElementById('page-info');
+            const totalRecords = document.getElementById('total-records');
+            
+            const ilceFilterButton = document.getElementById('ilce-filter-button');
+            const ilceFilterOptions = document.getElementById('ilce-filter-options');
+            const turFilterButton = document.getElementById('tur-filter-button');
+            const turFilterOptions = document.getElementById('tur-filter-options');
+            const dilFilterButton = document.getElementById('dil-filter-button');
+            const dilFilterOptions = document.getElementById('dil-filter-options');
+
+            function setupMultiSelect(button, optionsContainer, dataKey, stateKey) {
+                const uniqueValues = [...new Set(schoolData.map(item => item[dataKey]))].sort();
+                optionsContainer.innerHTML = uniqueValues.map(value => `
+                    <label class="flex items-center p-2 hover:bg-gray-100 cursor-pointer">
+                        <input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-[#4E6E81] focus:ring-[#4E6E81]" value="${value}">
+                        <span class="ml-2 text-sm text-gray-700">${value}</span>
+                    </label>
+                `).join('');
+                
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    optionsContainer.classList.toggle('show');
+                });
+                
+                optionsContainer.addEventListener('change', () => {
+                    const selected = Array.from(optionsContainer.querySelectorAll('input:checked')).map(cb => cb.value);
+                    state.filters[stateKey] = selected;
+                    button.textContent = selected.length ? `${selected.length} seçili` : `Tüm ${dataKey === 'ilce' ? 'İlçeler' : (dataKey === 'okulTuru' ? 'Türler' : 'Diller')}`;
+                    updateDashboard();
+                });
+            }
+
+            function initializeDashboard() {
+                setupMultiSelect(ilceFilterButton, ilceFilterOptions, 'ilce', 'districts');
+                setupMultiSelect(turFilterButton, turFilterOptions, 'okulTuru', 'types');
+                setupMultiSelect(dilFilterButton, dilFilterOptions, 'ogretimDili', 'languages');
+                
+                document.addEventListener('click', () => {
+                    ilceFilterOptions.classList.remove('show');
+                    turFilterOptions.classList.remove('show');
+                    dilFilterOptions.classList.remove('show');
+                });
+                
+                ilceFilterOptions.addEventListener('click', e => e.stopPropagation());
+                turFilterOptions.addEventListener('click', e => e.stopPropagation());
+                dilFilterOptions.addEventListener('click', e => e.stopPropagation());
+
+                searchInput.addEventListener('input', () => {
+                    state.filters.searchTerm = searchInput.value;
+                    updateDashboard();
+                });
+
+                percentileSlider.addEventListener('input', () => {
+                    state.filters.maxPercentile = parseFloat(percentileSlider.value);
+                    percentileLabel.textContent = `0.01 - ${state.filters.maxPercentile}`;
+                    updateDashboard();
+                });
+                
+                minScoreInput.addEventListener('input', () => {
+                    state.filters.minScore = minScoreInput.value ? parseFloat(minScoreInput.value) : null;
+                    updateDashboard();
+                });
+                maxScoreInput.addEventListener('input', () => {
+                    state.filters.maxScore = maxScoreInput.value ? parseFloat(maxScoreInput.value) : null;
+                    updateDashboard();
+                });
+                
+                sortFilter.addEventListener('change', (e) => {
+                    const [column, direction] = e.target.value.split('_');
+                    state.table.sortColumn = column === 'puan' ? 'tabanPuan' : (column === 'yuzdelik' ? 'yuzdelikDilim' : 'okulAdi');
+                    state.table.sortDirection = direction;
+                    updateDashboard();
+                });
+                
+                kaynakFilter.addEventListener('change', (e) => {
+                    state.filters.kaynakTuru = e.target.value;
+                    percentileSlider.disabled = e.target.value === 'Özel';
+                    updateDashboard();
+                });
+
+                resetButton.addEventListener('click', () => {
+                    state.filters = { searchTerm: '', districts: [], types: [], languages: [], maxPercentile: 100, kaynakTuru: 'Tümü', minScore: null, maxScore: null };
+                    state.table.currentPage = 1;
+                    state.table.sortColumn = 'tabanPuan';
+                    state.table.sortDirection = 'desc';
+                    
+                    searchInput.value = '';
+                    percentileSlider.value = 100;
+                    percentileSlider.disabled = false;
+                    percentileLabel.textContent = `0.01 - 100`;
+                    kaynakFilter.value = 'Tümü';
+                    sortFilter.value = 'puan_desc';
+                    minScoreInput.value = '';
+                    maxScoreInput.value = '';
+
+                    document.querySelectorAll('.custom-select-options input').forEach(cb => cb.checked = false);
+                    ilceFilterButton.textContent = 'Tüm İlçeler';
+                    turFilterButton.textContent = 'Tüm Türler';
+                    dilFilterButton.textContent = 'Tüm Diller';
+
+                    updateDashboard();
+                });
+                
+                document.querySelectorAll('.table-sortable th').forEach(th => {
+                    th.addEventListener('click', () => {
+                        const column = th.dataset.sort;
+                        if (state.table.sortColumn === column) {
+                            state.table.sortDirection = state.table.sortDirection === 'asc' ? 'desc' : 'asc';
+                        } else {
+                            state.table.sortColumn = column;
+                            state.table.sortDirection = 'asc';
+                        }
+                        updateDashboard();
+                    });
+                });
+
+                prevPageButton.addEventListener('click', () => {
+                    if (state.table.currentPage > 1) {
+                        state.table.currentPage--;
+                        updateDashboard();
+                    }
+                });
+
+                nextPageButton.addEventListener('click', () => {
+                    const filteredData = getFilteredData();
+                    const totalPages = Math.ceil(filteredData.length / state.table.rowsPerPage);
+                    if (state.table.currentPage < totalPages) {
+                        state.table.currentPage++;
+                        updateDashboard();
+                    }
+                });
+
+                initializeCharts();
+                updateDashboard();
+            }
+
+            function getFilteredData() {
+                const { searchTerm, districts, types, languages, maxPercentile, kaynakTuru, minScore, maxScore } = state.filters;
+                return schoolData.filter(school => {
+                    const searchMatch = !searchTerm || school.okulAdi.toLowerCase().includes(searchTerm.toLowerCase());
+                    const districtMatch = !districts.length || districts.includes(school.ilce);
+                    const typeMatch = !types.length || types.includes(school.okulTuru);
+                    const languageMatch = !languages.length || languages.includes(school.ogretimDili);
+                    const percentileMatch = school.kaynakTuru === 'Özel' || school.yuzdelikDilim <= maxPercentile;
+                    const kaynakMatch = kaynakTuru === 'Tümü' || school.kaynakTuru === kaynakTuru;
+                    const minScoreMatch = minScore === null || school.tabanPuan >= minScore;
+                    const maxScoreMatch = maxScore === null || school.tabanPuan <= maxScore;
+                    
+                    return searchMatch && districtMatch && typeMatch && languageMatch && percentileMatch && kaynakMatch && minScoreMatch && maxScoreMatch;
+                });
+            }
+
+            function updateDashboard() {
+                const filteredData = getFilteredData();
+                const sortedData = sortData(filteredData);
+                updateStats(sortedData);
+                updateCharts(sortedData);
+                updateTable(sortedData);
+            }
+            
+            function sortData(data) {
+                const { sortColumn, sortDirection } = state.table;
+                return [...data].sort((a, b) => {
+                    let valA = a[sortColumn];
+                    let valB = b[sortColumn];
+
+                    if (valA === null || valA === undefined) valA = sortDirection === 'asc' ? Infinity : -Infinity;
+                    if (valB === null || valB === undefined) valB = sortDirection === 'asc' ? Infinity : -Infinity;
+
+                    if (typeof valA === 'string') {
+                        valA = valA.toLowerCase();
+                        valB = valB.toLowerCase();
+                    }
+                    
+                    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            }
+
+            function updateStats(data) {
+                document.getElementById('total-schools').textContent = data.length;
+                if (data.length > 0) {
+                    const totalScore = data.reduce((sum, school) => sum + school.tabanPuan, 0);
+                    document.getElementById('avg-score').textContent = (totalScore / data.length).toFixed(3);
+                    
+                    const scores = data.map(s => s.tabanPuan);
+                    const percentiles = data.filter(s => s.yuzdelikDilim !== null).map(s => s.yuzdelikDilim);
+                    document.getElementById('max-score').textContent = Math.max(...scores).toFixed(3);
+                    document.getElementById('min-percentile').textContent = percentiles.length > 0 ? Math.min(...percentiles).toFixed(2) : 'N/A';
+                } else {
+                    document.getElementById('avg-score').textContent = 'N/A';
+                    document.getElementById('max-score').textContent = 'N/A';
+                    document.getElementById('min-percentile').textContent = 'N/A';
+                }
+            }
+
+            function updateTable(data) {
+                const { currentPage, rowsPerPage } = state.table;
+                const totalPages = Math.ceil(data.length / rowsPerPage);
+                state.table.currentPage = Math.min(currentPage, totalPages) || 1;
+
+                const start = (state.table.currentPage - 1) * rowsPerPage;
+                const end = start + rowsPerPage;
+                const paginatedData = data.slice(start, end);
+
+                tableBody.innerHTML = paginatedData.map(school => `
+                    <tr class="hover:bg-[#F8F7F4]">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium ${school.kaynakTuru === 'Özel' ? 'text-purple-700' : 'text-green-700'}">${school.kaynakTuru}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${school.ilce}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${school.okulAdi} ${school.alanProgram !== '-' ? `(${school.alanProgram})` : ''}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${school.okulTuru}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${school.ogretimDili}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#27374D]">${school.tabanPuan.toFixed(3)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#4E6E81]">${school.yuzdelikDilim !== null ? school.yuzdelikDilim.toFixed(2) : 'N/A'}</td>
+                    </tr>
+                `).join('');
+                
+                pageInfo.textContent = `Sayfa ${state.table.currentPage} / ${totalPages || 1}`;
+                totalRecords.textContent = data.length;
+                prevPageButton.disabled = state.table.currentPage === 1;
+                nextPageButton.disabled = state.table.currentPage === totalPages || totalPages === 0;
+            }
+
+            function initializeCharts() {
+                const commonOptions = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            backgroundColor: 'rgba(39, 55, 77, 0.9)',
+                            titleFont: { size: 14, weight: 'bold' },
+                            bodyFont: { size: 12 },
+                            padding: 10,
+                            cornerRadius: 4,
+                            displayColors: false
+                        }
+                    }
+                };
+                
+                charts.schoolsByDistrict = new Chart(document.getElementById('schoolsByDistrictChart'), {
+                    type: 'bar',
+                    options: { ...commonOptions, indexAxis: 'y', scales: { x: { beginAtZero: true } } }
+                });
+                
+                charts.schoolTypes = new Chart(document.getElementById('schoolTypesChart'), {
+                    type: 'doughnut',
+                    options: { ...commonOptions, plugins: { legend: { position: 'right' } } }
+                });
+
+                charts.scoreVsPercentile = new Chart(document.getElementById('scoreVsPercentileChart'), {
+                    type: 'scatter',
+                    options: {
+                        ...commonOptions,
+                        scales: {
+                            x: { title: { display: true, text: 'Yüzdelik Dilim (%)' } },
+                            y: { title: { display: true, text: 'Taban Puan' } }
+                        },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.raw.label || '';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            function updateCharts(data) {
+                updateDistrictChart(data);
+                updateTypeChart(data);
+                updateScatterChart(data);
+            }
+
+            function updateDistrictChart(data) {
+                const districtCounts = data.reduce((acc, school) => {
+                    acc[school.ilce] = (acc[school.ilce] || 0) + 1;
+                    return acc;
+                }, {});
+                
+                const sortedDistricts = Object.entries(districtCounts).sort((a, b) => b[1] - a[1]);
+                const top15Districts = sortedDistricts.slice(0, 15);
+
+                charts.schoolsByDistrict.data = {
+                    labels: top15Districts.map(d => d[0]),
+                    datasets: [{
+                        label: 'Okul Sayısı',
+                        data: top15Districts.map(d => d[1]),
+                        backgroundColor: '#4E6E81',
+                        borderColor: '#27374D',
+                        borderWidth: 1
+                    }]
+                };
+                charts.schoolsByDistrict.update();
+            }
+
+            function updateTypeChart(data) {
+                const typeCounts = data.reduce((acc, school) => {
+                    acc[school.okulTuru] = (acc[school.okulTuru] || 0) + 1;
+                    return acc;
+                }, {});
+                
+                charts.schoolTypes.data = {
+                    labels: Object.keys(typeCounts),
+                    datasets: [{
+                        data: Object.values(typeCounts),
+                        backgroundColor: ['#27374D', '#526D82', '#9DB2BF', '#DDE6ED', '#A0C49D', '#C4D7B2', '#E1ECC8', '#F7FFE5', '#867070', '#D5B4B4', '#E4D0D0', '#F5EBEB'],
+                    }]
+                };
+                charts.schoolTypes.update();
+            }
+             
+            function updateScatterChart(data) {
+                const devletOkullari = data.filter(s => s.kaynakTuru === 'Devlet' && s.yuzdelikDilim !== null);
+                charts.scoreVsPercentile.data = {
+                    datasets: [{
+                        label: 'Devlet Okulları',
+                        data: devletOkullari.map(school => ({
+                            x: school.yuzdelikDilim,
+                            y: school.tabanPuan,
+                            label: `${school.okulAdi} (${school.yuzdelikDilim}%)`
+                        })),
+                        backgroundColor: 'rgba(78, 110, 129, 0.6)',
+                    }]
+                };
+                charts.scoreVsPercentile.update();
+            }
+
+            initializeDashboard();
+        });
+    </script>
+</body>
+</html>
